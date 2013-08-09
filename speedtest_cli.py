@@ -20,6 +20,7 @@ try:
 except ImportError:
     from urllib.request import urlopen, Request
 
+import json
 import math
 import time
 import os
@@ -338,6 +339,42 @@ def getBestServer(servers):
     return best
 
 
+def run_server(best, simple):
+    if not simple:
+        print_('Hosted by %(sponsor)s (%(name)s) [%(d)0.2f km]: '
+               '%(latency)s ms' % best)
+    else:
+        print_('Ping: %(latency)s ms' % best)
+
+    sizes = [350, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
+    urls = []
+    for size in sizes:
+        for i in range(0, 4):
+            urls.append('%s/random%sx%s.jpg' %
+                        (os.path.dirname(best['url']), size, size))
+
+    if not simple:
+        print_('Testing download speed', end='')
+
+    dlspeed = downloadSpeed(urls, simple)
+    if not simple:
+        print_()
+    print_('Download: %0.2f Mbit/s' % ((dlspeed / 1000 / 1000) * 8))
+
+    sizesizes = [int(.25 * 1000 * 1000), int(.5 * 1000 * 1000)]
+    sizes = []
+    for size in sizesizes:
+        for i in range(0, 25):
+            sizes.append(size)
+    if not simple:
+        print_('Testing upload speed', end='')
+    ulspeed = uploadSpeed(best['url'], sizes, simple)
+    if not simple:
+        print_()
+    print_('Upload: %0.2f Mbit/s' % ((ulspeed / 1000 / 1000) * 8))
+
+    return (dlspeed, ulspeed, best['latency'])
+
 def speedtest():
     """Run the full speedtest.net test"""
 
@@ -364,6 +401,7 @@ def speedtest():
                              'sorted by distance')
     parser.add_argument('--server', help='Specify a server ID to test against')
     parser.add_argument('--mini', help='URL of the Speedtest Mini server')
+    parser.add_argument('--bench', action='store_true', help='run a bench')
 
     options = parser.parse_args()
     if isinstance(options, tuple):
@@ -378,7 +416,7 @@ def speedtest():
 
     if not args.simple:
         print_('Retrieving speedtest.net server list...')
-    if args.list or args.server:
+    if args.list or args.server or args.bench:
         servers = closestServers(config['client'], True)
         if args.list:
             serverList = []
@@ -435,41 +473,26 @@ def speedtest():
             best = getBestServer(servers)
         except:
             best = servers[0]
-    else:
+    elif not args.bench:
         if not args.simple:
             print_('Selecting best server based on ping...')
         best = getBestServer(servers)
 
-    if not args.simple:
-        print_('Hosted by %(sponsor)s (%(name)s) [%(d)0.2f km]: '
-               '%(latency)s ms' % best)
+    if args.bench:
+        #print_(servers)
+        stats = []
+        for server in servers:
+            best = getBestServer(filter(lambda x: x['id'] == server['id'],
+                                        servers))
+            (dlspeed, ulspeed, ping) = run_server(server, args.simple)
+            best['download'] = dlspeed
+            best['upload'] = ulspeed
+            stats.append(best)
+            break
+        with open('result.json', 'w') as outfile:
+            json.dump(stats, outfile)
     else:
-        print_('Ping: %(latency)s ms' % best)
-
-    sizes = [350, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
-    urls = []
-    for size in sizes:
-        for i in range(0, 4):
-            urls.append('%s/random%sx%s.jpg' %
-                        (os.path.dirname(best['url']), size, size))
-    if not args.simple:
-        print_('Testing download speed', end='')
-    dlspeed = downloadSpeed(urls, args.simple)
-    if not args.simple:
-        print_()
-    print_('Download: %0.2f Mbit/s' % ((dlspeed / 1000 / 1000) * 8))
-
-    sizesizes = [int(.25 * 1000 * 1000), int(.5 * 1000 * 1000)]
-    sizes = []
-    for size in sizesizes:
-        for i in range(0, 25):
-            sizes.append(size)
-    if not args.simple:
-        print_('Testing upload speed', end='')
-    ulspeed = uploadSpeed(best['url'], sizes, args.simple)
-    if not args.simple:
-        print_()
-    print_('Upload: %0.2f Mbit/s' % ((ulspeed / 1000 / 1000) * 8))
+        (dlspeed, ulspeed) = run_server(best, args.simple)
 
     if args.share and args.mini:
         print_('Cannot generate a speedtest.net share results image while '
