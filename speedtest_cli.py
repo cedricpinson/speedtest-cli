@@ -488,7 +488,6 @@ def speedtest():
             best['download'] = dlspeed
             best['upload'] = ulspeed
             stats.append(best)
-            break
         with open('result.json', 'w') as outfile:
             json.dump(stats, outfile)
     else:
