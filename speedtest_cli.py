@@ -484,7 +484,14 @@ def speedtest():
         for server in servers:
             best = getBestServer(filter(lambda x: x['id'] == server['id'],
                                         servers))
-            (dlspeed, ulspeed, ping) = run_server(server, args.simple)
+            dlspeed = 0
+            ulspeed = 0
+            ping = 0
+            try:
+                (dlspeed, ulspeed, ping) = run_server(server, args.simple)
+            except Exception as e:
+                print "skipping because of %s" % str(e)
+                continue
             best['download'] = dlspeed
             best['upload'] = ulspeed
             stats.append(best)
