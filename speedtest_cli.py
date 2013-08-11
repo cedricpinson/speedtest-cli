@@ -149,13 +149,13 @@ class FileGetter(threading.Thread):
         try:
             if (time.time() - self.starttime) <= 10:
                 f = urlopen(self.url)
-                print "FileGetter running - %s " % (self.url)
+                sys.stderr.write("FileGetter running - %s\n" % (self.url))
                 while 1:
                     received = len(f.read(10240))
                     #print "%d - %s " % (received, self.url)
                     self.result.append(received)
                     if self.result[-1] == 0:
-                        print "FileGetter finished - %s " % (self.url)
+                        sys.stderr.write("FileGetter finished - %s\n" % (self.url))
                         break
                 f.close()
         except IOError:
@@ -170,7 +170,7 @@ def downloadSpeed(files, quiet=False):
             thread = FileGetter(file, start)
             thread.start()
             q.put(thread, True)
-            print "producer - pushed thread %s" % str(file)
+            sys.stderr.write("producer - pushed thread %s\n" % str(file))
             if not quiet:
                 sys.stdout.write('.')
                 sys.stdout.flush()
@@ -179,9 +179,9 @@ def downloadSpeed(files, quiet=False):
 
     def consumer(q, total_files):
         while len(finished) < total_files:
-            print "consumer - ask for thread but wait if nothing"
+            sys.stderr.write("consumer - ask for thread but wait if nothing\n")
             thread = q.get(True)
-            print "consumer - get one thread"
+            sys.stderr.write("consumer - get one thread\n")
             thread.join(THREAD_TIMEOUT)
             finished.append(sum(thread.result))
             del thread
@@ -502,7 +502,7 @@ def speedtest():
             try:
                 # check we did not processed already this id
                 if server['id'] in already_processed:
-                    print "already processed skipping %s - %s" % (server['name'], server['host'])
+                    print "already processed skipping %s - %s" % (server['name'], server['url'])
                     continue
                 best = getBestServer(filter(lambda x: x['id'] == server['id'],
                                         servers))
