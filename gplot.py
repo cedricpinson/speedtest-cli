@@ -72,6 +72,7 @@ def plot():
         pass
 
     parser.add_argument('--file', help='Specify a result file to plot')
+    parser.add_argument('--output', help='Specify a output file')
 
     options = parser.parse_args()
     if isinstance(options, tuple):
@@ -80,11 +81,39 @@ def plot():
         args = options
     del options
 
+    output_filename = args.output or "output"
+    output_file = open(output_filename, 'w')
+
     filename = args.file or "result.json"
     with open(filename, 'r') as infile:
         stats = json.load(infile)
-        for a in stats:
-            print "%s-%s-%fkm %s %f %f %f " % (a['cc'], a['name'], a['d'] ,  a['id'], a['latency'], a['download'], a['upload'])
+
+        stats_sorted = sorted(stats, key=lambda entry: int(entry['id']))
+
+        for a in stats_sorted:
+            s = "%s-%s-%fkm %s %f %f %f\n" % (a['cc'], a['name'], a['d'] ,  a['id'], a['latency'], a['download']/1000.0/1000.0*8, a['upload']/1000.0/1000.0*8)
+            output_file.write(s)
+    output_file.close()
+    plot_script = """#!/usr/local/bin/gnuplot
+set term svg enhanced mouse size %d,600 jsdir "./js/"
+set output '%s.svg'
+set boxwidth 1.0
+set style fill solid 1.00 border lt -1
+set autoscale x
+set xtics nomirror rotate by -55
+set xtics font "Times-Roman, 8" 
+set yrange [ 0.0 : 500]
+set y2range [ 0.0 : 100.0]
+set y2tics
+set ylabel "(ms)"
+set y2label "(Mbits)"
+set grid y y2
+set style data histograms
+plot "%s" using 3:xticlabels(1) axis x1y1 ti 'latency' , '' u 4 axis x1y2 ti 'download', '' u 5 axis x1y2 ti 'upload'""" % ( 600 + 20*len(stats_sorted), output_filename, output_filename )
+    plot_script_name = "%s.plot" % output_filename
+    with open(plot_script_name, 'w') as infile:
+        infile.write(plot_script)
+    
 
 def main():
     try:

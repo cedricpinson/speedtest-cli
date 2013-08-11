@@ -20,6 +20,8 @@ try:
 except ImportError:
     from urllib.request import urlopen, Request
 
+THREAD_TIMEOUT = 240.0
+
 import json
 import math
 import time
@@ -147,9 +149,13 @@ class FileGetter(threading.Thread):
         try:
             if (time.time() - self.starttime) <= 10:
                 f = urlopen(self.url)
+                print "FileGetter running - %s " % (self.url)
                 while 1:
-                    self.result.append(len(f.read(10240)))
+                    received = len(f.read(10240))
+                    #print "%d - %s " % (received, self.url)
+                    self.result.append(received)
                     if self.result[-1] == 0:
+                        print "FileGetter finished - %s " % (self.url)
                         break
                 f.close()
         except IOError:
@@ -164,6 +170,7 @@ def downloadSpeed(files, quiet=False):
             thread = FileGetter(file, start)
             thread.start()
             q.put(thread, True)
+            print "producer - pushed thread %s" % str(file)
             if not quiet:
                 sys.stdout.write('.')
                 sys.stdout.flush()
@@ -172,8 +179,10 @@ def downloadSpeed(files, quiet=False):
 
     def consumer(q, total_files):
         while len(finished) < total_files:
+            print "consumer - ask for thread but wait if nothing"
             thread = q.get(True)
-            thread.join()
+            print "consumer - get one thread"
+            thread.join(THREAD_TIMEOUT)
             finished.append(sum(thread.result))
             del thread
 
@@ -195,7 +204,7 @@ class FilePutter(threading.Thread):
         data = chars * (int(round(int(size) / 36.0)))
         self.data = ('content1=%s' % data[0:int(size)-9]).encode()
         del data
-        self.result = None
+        self.result = 0
         self.starttime = start
         threading.Thread.__init__(self)
 
@@ -232,7 +241,7 @@ def uploadSpeed(url, sizes, quiet=False):
     def consumer(q, total_sizes):
         while len(finished) < total_sizes:
             thread = q.get(True)
-            thread.join()
+            thread.join(THREAD_TIMEOUT)
             finished.append(thread.result)
             del thread
 
@@ -373,7 +382,7 @@ def run_server(best, simple):
         print_()
     print_('Upload: %0.2f Mbit/s' % ((ulspeed / 1000 / 1000) * 8))
 
-    return (dlspeed, ulspeed, best['latency'])
+    return (dlspeed, ulspeed)
 
 def speedtest():
     """Run the full speedtest.net test"""
@@ -479,22 +488,36 @@ def speedtest():
         best = getBestServer(servers)
 
     if args.bench:
-        #print_(servers)
         stats = []
+        already_processed = []
+        if os.path.exists("result.json"):
+            print "you already have a result.json file, resuming this file"
+            with open('result.json', 'r') as resuming:
+                json_content = json.load(resuming)
+                for a in json_content:
+                    stats.append(a)
+                    already_processed.append(a['id'])
+            
         for server in servers:
             try:
+                # check we did not processed already this id
+                if server['id'] in already_processed:
+                    print "already processed skipping %s - %s" % (server['name'], server['host'])
+                    continue
                 best = getBestServer(filter(lambda x: x['id'] == server['id'],
                                         servers))
-                (dlspeed, ulspeed, ping) = run_server(server, args.simple)
+                (dlspeed, ulspeed) = run_server(server, args.simple)
                 best['download'] = dlspeed
                 best['upload'] = ulspeed
                 stats.append(best)
+
+                # refresh the file
+                with open('result.json', 'w') as outfile:
+                    json.dump(stats, outfile)
+
             except Exception as e:
                 print "skipping because of %s" % str(e)
                 continue
-
-        with open('result.json', 'w') as outfile:
-            json.dump(stats, outfile)
     else:
         (dlspeed, ulspeed) = run_server(best, args.simple)
 
